@@ -1,10 +1,18 @@
 """Bot rekap keuangan - WhatsApp Cloud API (Meta).
-Env: WA_TOKEN, PHONE_NUMBER_ID, VERIFY_TOKEN, APP_SECRET, ADMIN_PASSWORD, BASE_URL, DB_PATH
+Env (dari file .env atau pengaturan server): WA_TOKEN, PHONE_NUMBER_ID, VERIFY_TOKEN, APP_SECRET, ADMIN_PASSWORD, BASE_URL, DB_PATH, ENV_FILE
 Jalankan: python app_cloud.py   (webhook: BASE_URL/webhook)
 """
 import os, re, json, hmac, hashlib, sqlite3, secrets, requests
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, abort
+
+# Muat rahasia dari file .env (di folder aplikasi, atau path lain lewat ENV_FILE).
+# Kalau server sudah punya pengaturan environment sendiri, file .env boleh tidak ada.
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.getenv("ENV_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")))
+except ImportError:
+    pass
 
 E = os.getenv
 DB = E("DB_PATH", "keuangan.db")
