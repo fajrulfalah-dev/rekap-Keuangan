@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rekap Keuangan</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/dashboard.css"></head><body><div class="wrap">
+<header><div><h1>Rekap Keuangan</h1><div class="sub" id="who"></div></div>
+<div class="ctl"><button id="prev" title="Bulan sebelumnya">‹</button><select id="bln"></select><button id="next" title="Bulan berikutnya">›</button><button id="th" title="Ganti tema">◐</button></div></header>
+<div class="grid k4">
+<div class="card"><div class="lb">Pemasukan</div><div class="v in" id="kin"></div></div>
+<div class="card"><div class="lb">Pengeluaran</div><div class="v out" id="kout"></div><div class="lb" id="kd">&nbsp;</div></div>
+<div class="card"><div class="lb">Saldo</div><div class="v" id="ksal"></div></div>
+<div class="card"><div class="lb" id="kavgl"></div><div class="v" id="kavg"></div></div></div>
+<div class="grid g2">
+<div class="card"><div class="row"><h3>Per kategori</h3><div class="tabs"><button data-t="keluar" class="on">Keluar</button><button data-t="masuk">Masuk</button></div></div>
+<div class="cv"><canvas id="c1"></canvas></div><div class="leg" id="leg"></div></div>
+<div class="card"><h3 id="t2"></h3><div class="cv"><canvas id="c2"></canvas></div>
+<div id="w3"><h3 style="margin-top:16px">6 bulan terakhir (klik batang untuk pilih bulan)</h3><div class="cv"><canvas id="c3"></canvas></div></div></div></div>
+<div class="card"><div class="row"><h3>Transaksi<span id="chip"></span></h3>
+<div class="ctl"><input id="q" placeholder="Cari kategori"><select id="tp"><option value="all">Semua</option><option value="masuk">Masuk</option><option value="keluar">Keluar</option></select></div></div>
+<div class="tw"><table><thead><tr><th data-s="tgl">Tanggal</th><th data-s="kategori">Kategori</th><th>Tipe</th><th class="n" data-s="jumlah">Nominal</th></tr></thead><tbody id="tb"></tbody></table></div></div>
+</div>
+<script src="/static/dashboard.js"></script></body></html>

@@ -1,60 +1,3 @@
-<!doctype html>
-<html lang="id"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Rekap Keuangan</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<style>
-:root{--bg:#f4f5f7;--card:#fff;--tx:#1b2230;--mu:#6b7585;--ln:#e5e8ee;--in:#12805c;--out:#c4372b;--ac:#3b6ef5;--chip:#eef2ff;
-box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f131a;--card:#181e28;--tx:#e8ecf3;--mu:#98a2b3;--ln:#2a3342;--in:#3ecf9a;--out:#ff7b6e;--ac:#7c9bff;--chip:#222c45}}
-:root[data-theme="dark"]{--bg:#0f131a;--card:#181e28;--tx:#e8ecf3;--mu:#98a2b3;--ln:#2a3342;--in:#3ecf9a;--out:#ff7b6e;--ac:#7c9bff;--chip:#222c45}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:16px}
-header{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:14px}
-h1{font-size:1.25rem;margin:0}h3{margin:0 0 10px;font-size:.95rem}
-.sub,.lb{color:var(--mu);font-size:.82rem}
-.ctl{display:flex;gap:6px;align-items:center}
-button,select,input{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--ln);border-radius:8px;padding:7px 10px}
-button{cursor:pointer}button:hover{border-color:var(--ac)}
-.grid{display:grid;gap:12px;margin-bottom:12px}
-.k4{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
-.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}
-.card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:14px;min-width:0}
-.v{font-size:1.35rem;font-weight:650}.in{color:var(--in)}.out{color:var(--out)}
-.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
-.tabs{display:inline-flex;border:1px solid var(--ln);border-radius:8px;overflow:hidden}
-.tabs button{border:0;border-radius:0}.tabs .on{background:var(--ac);color:#fff}
-.cv{position:relative;height:230px}
-.leg{margin-top:10px;display:grid;gap:4px}
-.li{cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:3px 8px;padding:5px 6px;border-radius:8px}
-.li:hover,.li.on{background:var(--chip)}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
-.bar{grid-column:1/-1;height:5px;border-radius:3px;background:var(--ln);overflow:hidden}.bar i{display:block;height:100%}
-.tw{overflow-x:auto}table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--ln);white-space:nowrap}
-th{color:var(--mu);font-weight:500}th[data-s]{cursor:pointer}.n{text-align:right}
-.chip{display:inline-block;background:var(--chip);border-radius:999px;padding:2px 10px;margin-left:6px;cursor:pointer;font-weight:400}
-.empty{color:var(--mu);padding:20px;text-align:center}
-</style></head><body><div class="wrap">
-<header><div><h1>Rekap Keuangan</h1><div class="sub" id="who"></div></div>
-<div class="ctl"><button id="prev" title="Bulan sebelumnya">‹</button><select id="bln"></select><button id="next" title="Bulan berikutnya">›</button><button id="th" title="Ganti tema">◐</button></div></header>
-<div class="grid k4">
-<div class="card"><div class="lb">Pemasukan</div><div class="v in" id="kin"></div></div>
-<div class="card"><div class="lb">Pengeluaran</div><div class="v out" id="kout"></div><div class="lb" id="kd">&nbsp;</div></div>
-<div class="card"><div class="lb">Saldo</div><div class="v" id="ksal"></div></div>
-<div class="card"><div class="lb" id="kavgl"></div><div class="v" id="kavg"></div></div></div>
-<div class="grid g2">
-<div class="card"><div class="row"><h3>Per kategori</h3><div class="tabs"><button data-t="keluar" class="on">Keluar</button><button data-t="masuk">Masuk</button></div></div>
-<div class="cv"><canvas id="c1"></canvas></div><div class="leg" id="leg"></div></div>
-<div class="card"><h3 id="t2"></h3><div class="cv"><canvas id="c2"></canvas></div>
-<div id="w3"><h3 style="margin-top:16px">6 bulan terakhir (klik batang untuk pilih bulan)</h3><div class="cv"><canvas id="c3"></canvas></div></div></div></div>
-<div class="card"><div class="row"><h3>Transaksi<span id="chip"></span></h3>
-<div class="ctl"><input id="q" placeholder="Cari kategori"><select id="tp"><option value="all">Semua</option><option value="masuk">Masuk</option><option value="keluar">Keluar</option></select></div></div>
-<div class="tw"><table><thead><tr><th data-s="tgl">Tanggal</th><th data-s="kategori">Kategori</th><th>Tipe</th><th class="n" data-s="jumlah">Nominal</th></tr></thead><tbody id="tb"></tbody></table></div></div>
-</div>
-<script>
 const DEMO=false;
 const $=s=>document.querySelector(s),rp=n=>"Rp"+Math.round(n).toLocaleString("id-ID");
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -129,4 +72,3 @@ document.querySelectorAll("th[data-s]").forEach(h=>h.onclick=()=>{const k=h.data
 $("#th").onclick=()=>{const d=document.documentElement,dark=(d.dataset.theme||(matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"))==="dark";d.dataset.theme=dark?"light":"dark";render()};
 render();
 })();
-</script></body></html>
