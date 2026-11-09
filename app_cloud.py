@@ -1,13 +1,12 @@
-"""Bot rekap keuangan - WhatsApp Cloud API (Meta).
-Env (dari file .env atau pengaturan server): WA_TOKEN, PHONE_NUMBER_ID, VERIFY_TOKEN, APP_SECRET, ADMIN_PASSWORD, BASE_URL, DB_PATH, ENV_FILE
-Jalankan: python app_cloud.py   (webhook: BASE_URL/webhook)
+"""Bot rekap keuangan - Telegram Bot API.
+Env (file .env atau pengaturan server): TELEGRAM_TOKEN, WEBHOOK_SECRET, ADMIN_PASSWORD, BASE_URL, DB_PATH, ENV_FILE
+Mode webhook : python app_telegram.py          (Telegram -> BASE_URL/webhook, butuh URL HTTPS publik)
+Mode polling : python app_telegram.py poll     (tanpa webhook, cocok untuk tes lokal)
 """
-import os, re, json, hmac, hashlib, sqlite3, secrets, requests
+import os, re, sys, json, hmac, sqlite3, secrets, threading, time, requests
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_from_directory, abort
 
-# Muat rahasia dari file .env (di folder aplikasi, atau path lain lewat ENV_FILE).
-# Kalau server sudah punya pengaturan environment sendiri, file .env boleh tidak ada.
 try:
     from dotenv import load_dotenv
     load_dotenv(os.getenv("ENV_FILE", os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")))
@@ -16,15 +15,14 @@ except ImportError:
 
 E = os.getenv
 DB = E("DB_PATH", "keuangan.db")
-WA_TOKEN, PHONE_ID = E("WA_TOKEN", ""), E("PHONE_NUMBER_ID", "")
-VERIFY, APP_SECRET, ADMIN_PW = E("VERIFY_TOKEN", "ganti-ini"), E("APP_SECRET", ""), E("ADMIN_PASSWORD", "")
+TOKEN = E("TELEGRAM_TOKEN", "")
+SECRET, ADMIN_PW = E("WEBHOOK_SECRET", ""), E("ADMIN_PASSWORD", "")
 BASE_URL = E("BASE_URL", "http://localhost:5000")
-GRAPH = "https://graph.facebook.com/v21.0"  # cek versi terbaru di dokumentasi Meta
+API = f"https://api.telegram.org/bot{TOKEN}"
 KAT = {
     "keluar": ["Makanan", "Transport", "Belanja", "Tagihan", "Kesehatan", "Hiburan", "Pendidikan", "Lainnya"],
     "masuk": ["Gaji", "Bonus", "Usaha", "Hadiah", "Lainnya"],
 }
-AMT = re.compile(r"(\d[\d.,]*)\s*(rb|ribu|k|jt|juta)?\b", re.I)
 HERE = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__)
 
@@ -41,6 +39,7 @@ def q(sql, a=(), one=False, w=False):
 
 
 def init_db():
+    # kolom "wa" menyimpan chat_id Telegram (nama kolom dipertahankan agar cocok dengan dashboard)
     with sqlite3.connect(DB) as c:
         c.executescript("""
         CREATE TABLE IF NOT EXISTS users(wa TEXT PRIMARY KEY, nama TEXT, token TEXT, tgl TEXT);
@@ -55,43 +54,35 @@ def rp(n):
     return "Rp" + f"{n:,.0f}".replace(",", ".")
 
 
-def parse_amount(text):
-    m = AMT.search(text)
-    if not m:
-        return None, text
-    num, suf = m.group(1), (m.group(2) or "").lower()
-    if suf:
-        val = float(num.replace(",", ".")) * (1_000_000 if suf in ("jt", "juta") else 1_000)
-    else:
-        val = float(re.sub(r"[.,]", "", num))
-    return val, (text[:m.start()] + text[m.end():]).strip()
-
-
 # ---------- kirim pesan ----------
-def send(to, payload):
-    payload.update(messaging_product="whatsapp", to=to)
-    if not WA_TOKEN:
-        print("[KIRIM]", to, json.dumps(payload, ensure_ascii=False))
-        return
-    r = requests.post(f"{GRAPH}/{PHONE_ID}/messages", headers={"Authorization": "Bearer " + WA_TOKEN},
-                      json=payload, timeout=15)
-    if r.status_code >= 400:
-        print("[ERROR WA]", r.text)
+def tg(method, **payload):
+    if not TOKEN:
+        print("[KIRIM]", method, json.dumps(payload, ensure_ascii=False))
+        return {}
+    try:
+        r = requests.post(f"{API}/{method}", json=payload, timeout=40)
+        if r.status_code >= 400:
+            print("[ERROR TG]", r.text)
+        return r.json()
+    except Exception as ex:
+        print("[ERROR TG]", ex)
+        return {}
 
 
-def text(to, t):
-    send(to, {"type": "text", "text": {"body": t}})
+def text(to, t, keyboard=None):
+    p = {"chat_id": to, "text": t, "disable_web_page_preview": True}
+    if keyboard:
+        p["reply_markup"] = {"inline_keyboard": keyboard}
+    tg("sendMessage", **p)
 
 
-def buttons(to, t, opts):  # maksimal 3 tombol, judul maks 20 karakter
-    send(to, {"type": "interactive", "interactive": {"type": "button", "body": {"text": t},
-        "action": {"buttons": [{"type": "reply", "reply": {"id": i, "title": ti}} for i, ti in opts]}}})
+def buttons(to, t, opts):  # satu baris tombol
+    text(to, t, [[{"text": ti, "callback_data": i} for i, ti in opts]])
 
 
-def pick(to, t, opts):  # daftar pilihan, maksimal 10 baris
-    send(to, {"type": "interactive", "interactive": {"type": "list", "body": {"text": t},
-        "action": {"button": "Pilih", "sections": [{"title": "Pilihan",
-        "rows": [{"id": i, "title": ti[:24]} for i, ti in opts]}]}}})
+def pick(to, t, opts, per_row=2):  # daftar pilihan, 2 tombol per baris
+    rows = [[{"text": ti, "callback_data": i} for i, ti in opts[n:n + per_row]] for n in range(0, len(opts), per_row)]
+    text(to, t, rows)
 
 
 def menu(to, pre=""):
@@ -111,7 +102,7 @@ def clear(wa):
 def register(wa, t, step):
     if step is None:
         set_state(wa, "sandi")
-        return text(wa, "Halo! Nomor ini belum terdaftar. Masukkan sandi akses untuk mendaftar.")
+        return text(wa, "Halo! Akun Telegram ini belum terdaftar. Masukkan sandi akses untuk mendaftar.")
     tr = q("SELECT * FROM tries WHERE wa=?", (wa,), one=True)
     if tr and tr["until"] and tr["until"] > now().isoformat():
         return text(wa, "Terlalu banyak percobaan. Coba lagi nanti.")
@@ -131,7 +122,7 @@ def register(wa, t, step):
         return menu(wa, f"Pendaftaran berhasil, {nama}!")
 
 
-# ---------- menu untuk nomor terdaftar ----------
+# ---------- menu untuk akun terdaftar ----------
 def handle(wa, val):
     t, low = val.strip(), val.strip().lower()
     user = q("SELECT * FROM users WHERE wa=?", (wa,), one=True)
@@ -139,7 +130,7 @@ def handle(wa, val):
     step = st["step"] if st else None
     if not user:
         return register(wa, t, step)
-    if low in ("menu", "batal"):
+    if low in ("menu", "batal", "start"):
         clear(wa)
         return menu(wa)
     if low in ("masuk", "keluar"):
@@ -164,37 +155,43 @@ def handle(wa, val):
     return menu(wa)
 
 
-# ---------- webhook Meta ----------
-@app.get("/webhook")
-def verify():
-    if request.args.get("hub.mode") == "subscribe" and request.args.get("hub.verify_token") == VERIFY:
-        return request.args.get("hub.challenge", ""), 200
-    abort(403)
+# ---------- terima update Telegram ----------
+def process(u):
+    uid = "tg%s" % u.get("update_id")
+    if q("SELECT 1 FROM seen WHERE id=?", (uid,), one=True):
+        return  # cegah update diproses dua kali
+    q("INSERT INTO seen VALUES(?)", (uid,), w=True)
+    if "callback_query" in u:
+        cb = u["callback_query"]
+        tg("answerCallbackQuery", callback_query_id=cb["id"])  # hilangkan ikon loading di tombol
+        msg = cb.get("message") or {}
+        chat = msg.get("chat", {})
+        v = cb.get("data", "menu")
+    elif "message" in u:
+        msg = u["message"]
+        chat = msg.get("chat", {})
+        v = msg.get("text")
+        if v is None:
+            v = "menu"  # stiker, foto, dll
+        elif v.startswith("/"):
+            v = v[1:].split("@")[0].split()[0] if v[1:].strip() else "menu"
+    else:
+        return
+    if chat.get("type") != "private":
+        return  # hanya chat pribadi, abaikan grup
+    try:
+        handle(str(chat["id"]), v)
+    except Exception as ex:
+        print("[ERROR]", ex)
 
 
 @app.post("/webhook")
 def hook():
-    if APP_SECRET:
-        exp = "sha256=" + hmac.new(APP_SECRET.encode(), request.get_data(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(request.headers.get("X-Hub-Signature-256", ""), exp):
-            abort(403)
-    for e in (request.get_json(silent=True) or {}).get("entry", []):
-        for ch in e.get("changes", []):
-            for m in ch.get("value", {}).get("messages", []):
-                if q("SELECT 1 FROM seen WHERE id=?", (m["id"],), one=True):
-                    continue  # cegah pesan diproses dua kali saat Meta mengirim ulang
-                q("INSERT INTO seen VALUES(?)", (m["id"],), w=True)
-                if m["type"] == "text":
-                    v = m["text"]["body"]
-                elif m["type"] == "interactive":
-                    i = m["interactive"]
-                    v = (i.get("button_reply") or i.get("list_reply"))["id"]
-                else:
-                    v = "menu"
-                try:
-                    handle(m["from"], v)
-                except Exception as ex:
-                    print("[ERROR]", ex)
+    if SECRET and not hmac.compare_digest(request.headers.get("X-Telegram-Bot-Api-Secret-Token", ""), SECRET):
+        abort(403)
+    u = request.get_json(silent=True)
+    if u:
+        process(u)
     return "ok"
 
 
@@ -214,11 +211,34 @@ def api(tok):
 @app.get("/d/<tok>")
 def dashboard(tok):
     owner(tok)
-    return send_from_directory(os.path.join(HERE, "static"), "dashboard.html")
+    return send_from_directory(os.path.join(HERE, "static"), "index.html")
+
+
+@app.get("/")
+def home():
+    return "Bot rekap keuangan aktif."
+
+
+def poll():
+    tg("deleteWebhook")
+    off = None
+    print("Mode polling aktif. Kirim /start ke bot Anda di Telegram.")
+    while True:
+        r = tg("getUpdates", timeout=30, offset=off, allowed_updates=["message", "callback_query"])
+        for u in r.get("result", []):
+            off = u["update_id"] + 1
+            process(u)
+        if not r:
+            time.sleep(3)
 
 
 init_db()
 if __name__ == "__main__":
     if not ADMIN_PW:
         print("PERINGATAN: ADMIN_PASSWORD belum diset, tidak ada yang bisa mendaftar.")
-    app.run(host="0.0.0.0", port=int(E("PORT", 5000)))
+    port = int(E("PORT", 5000))
+    if len(sys.argv) > 1 and sys.argv[1] == "poll":
+        threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port), daemon=True).start()
+        poll()
+    else:
+        app.run(host="0.0.0.0", port=port)
